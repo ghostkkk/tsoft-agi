@@ -83,12 +83,37 @@ def _decode_best(raw: bytes) -> str:
     return raw.decode("utf-8", errors="replace")
 
 
+def _warn_powershell_stdin(text: str) -> None:
+    """Windows + stdin pipe 입력 시 한글 깨짐 의심 detect → stderr 경고.
+
+    PowerShell native pipe 가 UTF-8 보장 안 해서 한글이 `?` 로 깨지는 케이스.
+    의심 지표: '?' 비율 > 5% 또는 '???' 같은 연속 ? 패턴.
+    """
+    if sys.platform != "win32":
+        return
+    if not text:
+        return
+    q_count = text.count("?")
+    triple_q = "???" in text
+    if triple_q or (len(text) > 50 and q_count / len(text) > 0.05):
+        print(
+            "⚠ Windows stdin pipe — '?' 비율 이상 / 한글 깨짐 의심.\n"
+            "   PowerShell 은 stdin pipe 가 UTF-8 보장 안 함. --file 옵션 사용 권장:\n"
+            "     $tmp = \"$env:TEMP\\agi-digest.txt\"\n"
+            "     [System.IO.File]::WriteAllText($tmp, $digest, (New-Object System.Text.UTF8Encoding($false)))\n"
+            "     python agi-upload.py --file $tmp ...",
+            file=sys.stderr,
+        )
+
+
 def read_text(file_path: str | None) -> str:
     if file_path:
         return _decode_best(Path(file_path).read_bytes())
     if sys.stdin.isatty():
         sys.exit("ERROR: --file 미지정 + stdin이 비어 있습니다.")
-    return _decode_best(sys.stdin.buffer.read())
+    text = _decode_best(sys.stdin.buffer.read())
+    _warn_powershell_stdin(text)
+    return text
 
 
 def main() -> None:
