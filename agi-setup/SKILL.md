@@ -13,12 +13,16 @@ argument-hint: "[project-id]"
 목표: 사용자 손은 토큰 paste 1회만. 나머지 4단계는 모두 AI 자동.
 
 ## 0. 현재 상태 점검 (먼저 한 번)
-- 다음 4개를 검사하고 각 항목을 한 줄로 보고: ✅ 있음 / ✗ 없음 / ⚠ 부분
-  - `~/.config/tsoft-agi/token`
-  - `~/.config/tsoft-agi/agi-upload.py`
-  - `~/.codex/AGENTS.md` (Codex/Cursor 환경) 또는 `~/.claude/CLAUDE.md` (Claude Code)
-  - 본문 안에 "TSoft AGI Push Policy" 섹션 존재 여부
-- 4개 다 ✅ 면 사용자에게 "설치 완료 상태. 검증만 진행할까요?" 묻고 작업 4로 점프.
+- 다음 5개를 검사하고 각 항목을 한 줄로 보고: ✅ 있음 / ✗ 없음 / ⚠ 부분
+  1. `~/.config/tsoft-agi/token`
+  2. `~/.config/tsoft-agi/agi-upload.py`
+  3. `~/.codex/AGENTS.md` (Codex/Cursor 환경) 또는 `~/.claude/CLAUDE.md` (Claude Code)
+  4. 본문 안에 "TSoft AGI Push Policy" 섹션 존재 여부
+  5. **본문 안에 새 룰 마커 (`last-digest.txt` 또는 `Write 도구로`) 존재 여부** — 없으면 옛 룰 (2026-05 이전)
+- 분기:
+  - 1~4 다 ✅ + 5도 ✅ → **완전 새 룰 적용 상태**. 사용자에게 "설치 완료 상태. 검증만 진행할까요?" 묻고 작업 4로 점프.
+  - 1~4 다 ✅ + 5는 ✗ → **옛 룰 박혀있음**. 작업 3 의 마이그레이션 절차로 강제 진입 (skip 금지).
+  - 1~4 중 ✗ 있으면 → 통상 설치 흐름 (작업 1부터).
 
 ## 1. 토큰 저장 (사용자 입력 필요한 유일한 단계)
 - 사용자에게 안내:
@@ -51,11 +55,23 @@ argument-hint: "[project-id]"
   ```
   curl -sL https://raw.githubusercontent.com/ghostkkk/tsoft-agi/main/memory/agents.md.template -o /tmp/agi-template.md
   ```
-- 대상 파일 본문에 `"TSoft AGI Push Policy"` 문자열이 **없을 때**: 위 template 내용을 대상 파일 끝에 append.
-- 대상 파일에 옛 버전 (응답 본문에 `<agi-digest>` 텍스트 첨부 룰) 이 이미 있는 경우:
-  - 사용자에게 한 줄 안내: "기존 룰 발견 — Write 도구 방식 (last-digest.txt) 으로 마이그레이션할까요?"
-  - 승인하면 옛 섹션 백업 (`~/.claude/CLAUDE.md.bak.<timestamp>`) 후 § 1 / "TSoft AGI Push Policy" 두 섹션만 새 template 으로 교체.
-- 절대 덮어쓰지 말 것 — 항상 백업 + 섹션 단위 교체.
+- **분기 — 작업 0 의 검사 5 (새 룰 마커) 결과 기준**:
+
+  **① 검사 5 = ✗ (옛 룰 박혀있음, 마이그레이션 필요)**:
+    1. 대상 파일을 `<file>.bak.<YYYYMMDD_HHMMSS>` 로 백업
+    2. 옛 § "TSoft AGI Auto Capture" / "TSoft AGI 자동 회수" / "TSoft AGI Push Policy" / "Secret Guard" 등
+       template 와 겹치는 섹션을 본문에서 **삭제**
+    3. 그 자리에 `/tmp/agi-template.md` 본문을 insert (이미 fetch 한 새 template)
+    4. 사용자가 손댄 다른 섹션 (예: "Response Rules") 은 보존
+    5. 한 줄 보고: "✅ 옛 룰 → 새 룰 마이그레이션 완료. 백업 = `<bak path>`"
+
+  **② 검사 4 = ✗ (Push Policy 자체 없음, 첫 설치)**:
+    - 대상 파일 끝에 `/tmp/agi-template.md` 본문을 append.
+
+  **③ 검사 4 = ✅ + 검사 5 = ✅ (이미 새 룰)**:
+    - skip. "이미 새 룰 적용 상태" 한 줄 보고.
+
+- 절대 통째 덮어쓰지 말 것 — 항상 백업 + 섹션 단위 교체.
 
 ### 핵심 변경 (2026-05): Write 도구 → 파일 방식
 이전 룰 ("응답 본문 마지막에 `<agi-digest>` 텍스트 첨부") 는 폐기.
