@@ -1,0 +1,12 @@
+{
+  "name": "tsoft-agi",
+  "displayName": "TSoft AGI Skills",
+  "shortDescription": "Auto-collect & curate AI-driven turns into Project Memory.",
+  "longDescription": "Cross-platform Agent Skills for the TSoft AGI Project Memory Harness. Install once, then push/charter/pack/review from any AI chat (Codex, Claude Code, Cursor, Gemini CLI, GitHub Copilot).",
+  "author": "TSoft / moon",
+  "homepage": "https://erp.t-soft.co.kr/",
+  "repository": "https://github.com/ghostkkk/tsoft-agi",
+  "license": "MIT",
+  "version": "0.1.0",
+  "plugins": ["."]
+}

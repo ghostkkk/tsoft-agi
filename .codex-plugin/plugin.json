@@ -1,0 +1,47 @@
+{
+  "name": "tsoft-agi",
+  "version": "0.1.0",
+  "description": "TSoft AGI — AI-driven development memory hub. Auto-collect every turn, curate, supply context.",
+  "author": {
+    "name": "TSoft (moon)",
+    "url": "https://github.com/ghostkkk"
+  },
+  "homepage": "https://github.com/ghostkkk/tsoft-agi",
+  "repository": "https://github.com/ghostkkk/tsoft-agi",
+  "license": "MIT",
+  "keywords": [
+    "tsoft",
+    "agi",
+    "project-memory",
+    "harness",
+    "agent-workflow",
+    "9-field",
+    "agi-digest"
+  ],
+  "skills": [
+    "./agi-setup",
+    "./agi-charter",
+    "./agi-pack",
+    "./agi-review"
+  ],
+  "interface": {
+    "displayName": "TSoft AGI Skills",
+    "shortDescription": "Auto-collect & curate every AI-driven turn into Project Memory.",
+    "longDescription": "TSoft AGI is a Project Memory Harness for AI-driven development. This plugin gives external AI tools (Codex, Claude Code, Cursor, ...) cross-platform skills to install the agent, write project charters, pull reminder packs, and review commit candidates — all from chat. Backend: https://erp.t-soft.co.kr/",
+    "developerName": "TSoft / moon",
+    "category": "Productivity",
+    "capabilities": [
+      "Interactive",
+      "Memory",
+      "ContextManagement"
+    ],
+    "websiteURL": "https://erp.t-soft.co.kr/",
+    "defaultPrompt": [
+      "Install TSoft AGI in this environment with /agi-setup.",
+      "Write the initial project charter with /agi-charter.",
+      "Pull the current Memory pack with /agi-pack.",
+      "Review candidate commits and merge with /agi-review."
+    ],
+    "brandColor": "#06B6D4"
+  }
+}

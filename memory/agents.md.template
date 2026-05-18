@@ -1,0 +1,95 @@
+# AGENTS.md — TSoft AGI 통합 정책
+
+> 이 섹션은 `tsoft-agi` plugin의 `/agi-setup` 이 `~/.codex/AGENTS.md` (Codex/Cursor)
+> 또는 `~/.claude/CLAUDE.md` (Claude Code) 에 merge한다.
+> 이미 같은 섹션이 있으면 skip, 없으면 append. **기존 파일을 덮어쓰지 않는다.**
+
+## TSoft AGI 자동 회수 — `<agi-digest>` 블록 (9-field 표준)
+
+이 환경에서 한 응답은 TSoft AGI 서버(https://erp.t-soft.co.kr/) 로 자동 회수된다.
+**의미 있는 변화가 있는 응답의 마지막에** 다음 블록을 자동 첨부한다:
+
+```
+<agi-digest>
+RAW: 사용자 요청 + 본인 응답의 핵심 원문 (긴 경우 발췌)
+SUMMARY: 이번 turn에서 무엇이 진행됐는지 1~2문장
+DECISIONS:
+- (새로 합의된 결정, 한 항목당 1줄)
+TASKS:
+- (새로 생긴 할일)
+RISKS:
+- [low|medium|high] (발견된 리스크)
+DEPRECATED:
+- (폐기된 방향) → replaced_by: (대체 방향)
+OPEN_QUESTIONS:
+- (아직 미해결 질문)
+ARTIFACTS:
+- (이번 turn에서 만들어진 파일/URL/링크)
+NEXT_CONTEXT:
+- (다음 AI 세션이 이어받아야 하는 컨텍스트)
+</agi-digest>
+```
+
+### 규칙
+1. **변화가 있을 때만 첨부.** 단순 조회/짧은 답변엔 생략.
+2. 해당 항목이 없는 섹션은 `- none` 1줄로 표기 (또는 섹션 자체 생략 가능).
+3. 한 항목 한 줄, 너무 길면 핵심만.
+4. 동일 결정 반복 첨부 금지.
+5. 코드 블록(```)이 아니라 본문 마지막에 그대로 텍스트로.
+
+서버가 `<agi-digest>` 발견 시 LLM 추출 호출을 생략한다 (비용 $0, 정확도 100%).
+
+---
+
+## TSoft AGI Push Policy (누락 방지 강화)
+
+### Push 대상 (의지로 판단하지 말고 무조건 push)
+- 코드 수정 / 새 파일 생성
+- 테스트 결과 / 성능 수치 / 디버그 결론
+- 설계 결정 / 아키텍처 변경
+- 작업 계획 / 튜닝 항목 / 다음 단계 정리
+- 원인 분석 / 트러블슈팅 결과
+- 운영 판단 ("이걸로 가자", "이건 폐기")
+
+### Push 생략 가능
+- 단순 인사 / "네" / "확인" / 3줄 미만 답변
+- 버튼 위치 같은 단순 안내
+- 이미 직전 turn에 push한 내용 반복
+- 응답에 토큰 / API key / 비밀번호 정규식 매치 — **자동 skip + 사유 보고**
+
+### 매 응답 직전 4단계 체크리스트
+1. 이 응답에 위 'Push 대상' 항목이 있는가?
+2. 있으면 `<agi-digest>` 9-field 블록을 응답 끝에 첨부.
+3. 자기 응답 텍스트(또는 digest 블록만)를 임시 파일로 저장.
+4. `python ~/.config/tsoft-agi/agi-upload.py --file <tmp> --source-tool <agent> --quiet` 실행.
+
+### 응답 맨 마지막 한 줄 자체 점검 라인 (반드시)
+다음 셋 중 하나를 응답의 *맨 마지막 줄*에 출력:
+- `ERP: pushed commit=<id>`         (성공한 경우 commit id 명시)
+- `ERP: skipped <reason>`           (예: `ERP: skipped simple-answer`, `ERP: skipped secret-detected`)
+- `ERP: failed <reason>`            (push 실패 사유)
+
+이 라인이 누락되면 사용자가 즉시 catch한다. 의지가 아니라 형식이 강제한다.
+
+### Secret 가드 (자동 skip)
+응답에 다음 패턴이 보이면 push 자체를 skip하고 사유 보고:
+- `sk-[A-Za-z0-9_-]{20,}` (OpenAI/Anthropic 류 키)
+- `ghp_|github_pat_` 시작 토큰
+- `AGI_TOKEN=` 또는 `~/.config/tsoft-agi/token` 의 평문 내용
+- 비밀번호 / DB connection string
+
+토큰은 `~/.config/tsoft-agi/token` 에 저장돼 있고 업로더가 자동 조회한다.
+**응답 본문에 토큰 평문 절대 노출 X.**
+
+---
+
+## Skill 호출 가이드
+
+사용자가 다음을 요청하면 대응 Skill 호출:
+
+| 사용자 의도 | Skill |
+|---|---|
+| 환경 설치 / AGI 연동 / 새 PC 설정 | `/agi-setup` |
+| 프로젝트 초기 문서 작성 / charter / Memory 채우기 | `/agi-charter` |
+| Reminder Pack / Memory snapshot / 다른 도구로 컨텍스트 이관 | `/agi-pack` |
+| commit 검토 / candidate merge / AGI 정리 | `/agi-review` |

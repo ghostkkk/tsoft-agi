@@ -1,0 +1,9 @@
+{
+  "name": "tsoft-agi",
+  "skills": [
+    "./agi-setup",
+    "./agi-charter",
+    "./agi-pack",
+    "./agi-review"
+  ]
+}
