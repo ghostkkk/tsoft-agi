@@ -61,14 +61,34 @@ def find_token(cli_token: str | None) -> str:
     )
 
 
+def _decode_best(raw: bytes) -> str:
+    """UTF-8 우선, 실패 시 Windows 한글 (cp949) fallback, 그래도 안 되면 utf-8 replace.
+
+    Codex / PowerShell 등에서 cp949 로 저장한 임시 파일도 한글 깨지지 않게.
+    """
+    # BOM 처리
+    if raw.startswith(b"\xef\xbb\xbf"):
+        raw = raw[3:]
+    if raw.startswith(b"\xff\xfe") or raw.startswith(b"\xfe\xff"):
+        # UTF-16 BOM
+        try:
+            return raw.decode("utf-16")
+        except UnicodeDecodeError:
+            pass
+    for enc in ("utf-8", "cp949", "euc-kr"):
+        try:
+            return raw.decode(enc)
+        except UnicodeDecodeError:
+            continue
+    return raw.decode("utf-8", errors="replace")
+
+
 def read_text(file_path: str | None) -> str:
     if file_path:
-        return Path(file_path).read_text(encoding="utf-8")
+        return _decode_best(Path(file_path).read_bytes())
     if sys.stdin.isatty():
         sys.exit("ERROR: --file 미지정 + stdin이 비어 있습니다.")
-    # binary로 읽고 UTF-8 디코드 — Windows의 cp949 stdin이 한글을 깨뜨리는 것 방지.
-    raw = sys.stdin.buffer.read()
-    return raw.decode("utf-8", errors="replace")
+    return _decode_best(sys.stdin.buffer.read())
 
 
 def main() -> None:
