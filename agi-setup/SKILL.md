@@ -47,9 +47,20 @@ argument-hint: "[project-id]"
 - 환경에 따라 대상 파일 결정:
   - Codex / Cursor → `~/.codex/AGENTS.md`
   - Claude Code  → `~/.claude/CLAUDE.md` (+ 프로젝트 루트에 `./.claude/CLAUDE.md` 가 있으면 프로젝트 컨텍스트만 추가)
-- 대상 파일에 본문에 `"TSoft AGI Push Policy"` 문자열이 **없을 때만** plugin의 `memory/agents.md.template` 내용을 append.
-- 이미 있으면 skip.
-- 절대 덮어쓰지 말 것.
+- template 가져오기 (이 plugin 의 `memory/agents.md.template` 본문):
+  ```
+  curl -sL https://raw.githubusercontent.com/ghostkkk/tsoft-agi/main/memory/agents.md.template -o /tmp/agi-template.md
+  ```
+- 대상 파일 본문에 `"TSoft AGI Push Policy"` 문자열이 **없을 때**: 위 template 내용을 대상 파일 끝에 append.
+- 대상 파일에 옛 버전 (응답 본문에 `<agi-digest>` 텍스트 첨부 룰) 이 이미 있는 경우:
+  - 사용자에게 한 줄 안내: "기존 룰 발견 — Write 도구 방식 (last-digest.txt) 으로 마이그레이션할까요?"
+  - 승인하면 옛 섹션 백업 (`~/.claude/CLAUDE.md.bak.<timestamp>`) 후 § 1 / "TSoft AGI Push Policy" 두 섹션만 새 template 으로 교체.
+- 절대 덮어쓰지 말 것 — 항상 백업 + 섹션 단위 교체.
+
+### 핵심 변경 (2026-05): Write 도구 → 파일 방식
+이전 룰 ("응답 본문 마지막에 `<agi-digest>` 텍스트 첨부") 는 폐기.
+새 룰: Write 도구로 `~/.claude/agi_hook/last-digest.txt` 에 저장 → transcript 안 `tool_use.input.file_text` 로 서버 fast-path 가 추출.
+사용자 채팅창에 큰 blob 노출되지 않음.
 
 ## 4. 검증 push (자동)
 - 다음 셸 명령 실행:
