@@ -116,6 +116,73 @@ def read_text(file_path: str | None) -> str:
     return text
 
 
+PHASE_STATE_FILE = Path.home() / ".config" / "tsoft-agi" / "phase-state.json"
+
+
+def _load_phase_state() -> dict:
+    if not PHASE_STATE_FILE.exists():
+        return {}
+    try:
+        return json.loads(PHASE_STATE_FILE.read_text(encoding="utf-8"))
+    except Exception:
+        return {}
+
+
+def _save_phase_state(state: dict) -> None:
+    try:
+        PHASE_STATE_FILE.parent.mkdir(parents=True, exist_ok=True)
+        PHASE_STATE_FILE.write_text(json.dumps(state), encoding="utf-8")
+    except Exception as e:
+        print(f"[agi-upload] phase-state save failed: {e}", file=sys.stderr)
+
+
+def _new_phase_group() -> str:
+    """ULID-스타일 — 26자 base32. 외부 패키지 없이 구현."""
+    import time, secrets, string
+    enc = "0123456789ABCDEFGHJKMNPQRSTVWXYZ"  # Crockford base32
+    ts = int(time.time() * 1000)
+    # 48-bit timestamp (10 chars) + 80-bit random (16 chars)
+    ts_part = ""
+    for _ in range(10):
+        ts_part = enc[ts & 0x1F] + ts_part
+        ts = ts >> 5
+    rand_part = "".join(enc[secrets.randbelow(32)] for _ in range(16))
+    return ts_part + rand_part
+
+
+def resolve_phase(args) -> dict:
+    """args + 환경변수 + state 파일 기준으로 phase 정보 결정.
+
+    반환: {"phase_group": ..., "phase_seq": ..., "phase_kind": ...} 또는 빈 dict.
+    """
+    if not (args.phase or args.phase_group):
+        return {}
+
+    state = _load_phase_state()
+    cur = state.get("current") or {}
+
+    # phase_group 결정 — CLI 인자 > 환경변수 > state.current > 새로 생성
+    group = (
+        args.phase_group
+        or os.environ.get("AGI_PHASE_GROUP")
+        or cur.get("phase_group")
+    )
+    if not group:
+        group = _new_phase_group()
+
+    # 자동 seq 증가 (state 의 last_seq + 1)
+    last_seq = cur.get("last_seq", 0) if cur.get("phase_group") == group else 0
+    seq = args.phase_seq if args.phase_seq is not None else (last_seq + 1)
+
+    kind = args.phase_kind or "phase"
+
+    # state 갱신
+    state["current"] = {"phase_group": group, "last_seq": seq, "phase_kind": kind}
+    _save_phase_state(state)
+
+    return {"phase_group": group, "phase_seq": seq, "phase_kind": kind}
+
+
 def main() -> None:
     ap = argparse.ArgumentParser(description="TSoft AGI ingest 업로더")
     ap.add_argument("--source-tool", default="codex",
@@ -125,17 +192,39 @@ def main() -> None:
     ap.add_argument("--url", default=os.environ.get("AGI_INGEST_URL", DEFAULT_URL),
                     help=f"ingest URL (기본 {DEFAULT_URL})")
     ap.add_argument("--quiet", action="store_true", help="성공 시 요약만 출력")
+    # 큰 turn 의 phase 별 commit 그룹화 (2026-05-19)
+    ap.add_argument("--phase", action="store_true",
+                    help="이 push 를 phase commit 으로 표시 — 자동으로 group ID 발급/재사용")
+    ap.add_argument("--phase-group", help="phase 그룹 ID 명시 (생략 시 자동)")
+    ap.add_argument("--phase-seq", type=int, help="phase 순서 (생략 시 자동 증가)")
+    ap.add_argument("--phase-kind", choices=["phase", "final"], help="기본 phase. 마지막은 final")
+    ap.add_argument("--phase-reset", action="store_true",
+                    help="phase state 초기화 (새 turn 시작 — 다음 push 가 새 group 만듦)")
     args = ap.parse_args()
+
+    if args.phase_reset:
+        try:
+            if PHASE_STATE_FILE.exists():
+                PHASE_STATE_FILE.unlink()
+            if not args.quiet:
+                print("✓ phase state reset")
+        except Exception as e:
+            print(f"phase reset failed: {e}", file=sys.stderr)
+        if not (args.phase or args.phase_group):
+            return
 
     text = read_text(args.file)
     if "<agi-digest>" not in text:
         sys.exit("ERROR: 입력 텍스트에 <agi-digest> 블록이 없습니다.")
+
+    phase = resolve_phase(args)
 
     payload = {
         "format": "agi-digest-text-v1",
         "token": find_token(args.token),
         "source_tool": args.source_tool,
         "digest_text": text,
+        **phase,   # phase_group / phase_seq / phase_kind (있을 때만)
     }
 
     req = urllib.request.Request(
@@ -155,8 +244,11 @@ def main() -> None:
         sys.exit(f"ERROR: 네트워크 — {e.reason}")
 
     stats = res.get("stats", {})
+    phase_tag = ""
+    if phase:
+        phase_tag = f" [phase {phase['phase_seq']} group={phase['phase_group'][:8]}…]"
     if args.quiet:
-        print(f"✓ ingested commit={res['commit_id']} type={res['commit_type']}")
+        print(f"✓ ingested commit={res['commit_id']} type={res['commit_type']}{phase_tag}")
     else:
         print(f"✓ ingested → {args.url}")
         print(f"  raw_id      : {res['raw_id']}")

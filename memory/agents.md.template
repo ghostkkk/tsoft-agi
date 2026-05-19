@@ -112,6 +112,26 @@ turn 중 만난 실패. 없으면 섹션 자체 생략.
 5개 필수는 거의 모든 의미 있는 turn 에 포함. 조건부 8개는 해당 사실이 있을 때만 — 억지로 채우지 말 것.
 크기 제한 X. 수십~수백 줄 OK.
 
+### 큰 turn (30분+ 또는 phase 5+) — phase 별 분할 push
+
+한 turn 의 작업이 길면 마지막 last-digest.txt 하나로 압축하지 말고 각 phase 끝마다 별도 commit:
+
+```
+# 1. 새 turn 시작 시 reset
+python ~/.config/tsoft-agi/agi-upload.py --phase-reset --quiet
+
+# 2. 각 phase 끝에서 (임시 파일은 UTF-8 no BOM)
+python ~/.config/tsoft-agi/agi-upload.py --file <tmp> --phase --source-tool <agent> --quiet
+
+# 3. 마지막 last-digest.txt 의 RAW 에 다음 sub-header 추가:
+#    [PHASE_GROUP] <위에서 발급된 group id>
+#    [PHASE_KIND] final
+```
+
+`--phase` 옵션이 phase_group 자동 발급/재사용 + seq 자동 증가.
+효과: 시간순 timeline 이 commit list 로, phase 별 부분 merge/reject 가능, 시점별 메타 보존.
+작은 turn 은 phase push 생략 (last-digest.txt 한 번만).
+
 ### 필수 규칙
 
 1. **변화가 있을 때만 Write 호출.** 단순 정보 조회 / 답변 / 짧은 확인엔 생략.
