@@ -132,6 +132,22 @@ python ~/.config/tsoft-agi/agi-upload.py --file <tmp> --phase --source-tool <age
 효과: 시간순 timeline 이 commit list 로, phase 별 부분 merge/reject 가능, 시점별 메타 보존.
 작은 turn 은 phase push 생략 (last-digest.txt 한 번만).
 
+#### PreToolUse hook 알림 (자동 신호)
+
+매 5번째 변경성 tool 호출 (Edit / Write / Bash / NotebookEdit) 후 stderr 에:
+```
+⏱ AGI: 누적 N 변경성 tools — phase push 고려.
+```
+
+이 신호는 `scripts/agi_pretool_hook.py` 가 자동 생성 (session 별 카운트).
+AI 가 이 알림 보면:
+1. 직전 변경 사항이 1 phase 로 묶이기 좋은지 판단
+2. 좋으면 phase 디지스트 + `agi-upload.py --phase` 호출
+3. 아직 묶기 어려우면 무시 — 다음 5번 째 알림 기다림
+
+설치: `scripts/agi_pretool_hook.py` 가 PC 에 있고, `~/.claude/settings.json` 또는
+`~/.codex/config.toml` 의 PreToolUse hook 에 등록돼야 작동.
+
 ### 필수 규칙
 
 1. **변화가 있을 때만 Write 호출.** 단순 정보 조회 / 답변 / 짧은 확인엔 생략.
