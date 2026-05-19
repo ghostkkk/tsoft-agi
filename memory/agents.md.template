@@ -54,18 +54,63 @@ Stop hook 이 없으므로:
 2. `python ~/.config/tsoft-agi/agi-upload.py --file <tmp> --source-tool <agent> --quiet` 실행
 3. 또는 응답 본문 마지막에 직접 첨부 (fallback)
 
-### RAW 작성 가이드 — 자세히, 압축 X
+### RAW 작성 가이드 — 13 sub-header 표준 (2026-05-19 도입)
 
-RAW field 는 "검증된 원본 기록" 이다. 미래에 누가 이 turn 만 봐도 무슨 일이 있었는지
-재구성 가능해야 한다. 다음을 다 포함:
+RAW field 는 자유 텍스트가 아니라 **표준 sub-header 로 구조화**한다.
+검색 / 추적 가능성 + AI 가 빠짐없이 작성 + UI 정확 추출이 목적.
 
-1. **사용자 요청 원문** — 핵심 문장 그대로 인용
-2. **AI 답변 본문 핵심** — 응답 본문의 의사결정/설명 부분 (요약 X, 그대로 발췌)
-3. **변경된 파일 상세** — path + 어떤 섹션을 어떻게 바꿨는지 핵심
-4. **tool 결과값** — Bash exit code / Grep 매치 / Read 핵심 / API 응답 status 등
-5. **결정 근거** — 왜 이 방향을 선택했는지
+13 sub-header — 필수 5 + 조건부 8:
 
-크기 제한 X. 수십~수백 줄 OK. "디지스트가 무거워지는 것" 보다 "미래에 맥락 부족한 것" 이 더 큰 문제.
+```
+RAW:
+[USER_PROMPT]
+사용자가 이 turn 에 보낸 원문 (그대로 인용, >= 1줄). 필수.
+
+[AI_RESPONSE]
+AI 가 응답 본문에 쓴 핵심 (요약 X, 의사결정/설명 부분 그대로 발췌). 필수.
+
+[CURRENT_TASK]
+지금 진행 중인 큰 작업 한 줄. 필수.
+
+[CONTEXT]
+이번 turn 시작 시점의 컨텍스트 (직전 turn 들 / 결정 / 운영 상태). 필수.
+
+[RESULT]
+이 turn 으로 무엇이 끝났나 (요약 1~2줄). 필수.
+
+[AI_OPINION]
+AI 가 한 판단 / 권장. 사용자에게 보고한 의견. (있을 때만)
+
+[SELECT_Q]
+AI 가 사용자에게 한 선택 질문 (있을 때만)
+
+[SELECT_A]
+직전 turn 에 사용자가 준 선택의 답 (이 turn 의 진행 근거가 됐다면)
+
+[GIT_HEAD]
+현재 작업 디렉토리의 git 상태. 코드 작업일 때 필수.
+형식: `<sha> <branch> [dirty|clean]`
+획득: `git rev-parse HEAD` + `git status --porcelain | wc -l`
+
+[TOOLS_USED]
+사용한 도구 + 결과 status. 한 줄로.
+예: `Bash:OK · Edit×3 · Read×7 · WebFetch:200 · Write:OK`
+
+[FILES_TOUCHED]
+변경/조회/삭제한 파일들. EDIT/WRITE/READ/DELETE prefix.
+예: `EDIT backend/app/foo.py · WRITE configs/bar.json · READ x10`
+
+[ERRORS]
+turn 중 만난 실패. 없으면 섹션 자체 생략.
+예: `tsc:exit=1 unused var · curl:502 retry → 200`
+
+[VALIDATION]
+변경 후 검증 결과. 검증 안 한 turn 은 생략.
+예: `frontend tsc:OK · backend deploy:OK · API healthz:200`
+```
+
+5개 필수는 거의 모든 의미 있는 turn 에 포함. 조건부 8개는 해당 사실이 있을 때만 — 억지로 채우지 말 것.
+크기 제한 X. 수십~수백 줄 OK.
 
 ### 필수 규칙
 
