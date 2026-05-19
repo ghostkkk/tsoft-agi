@@ -4,7 +4,7 @@ description: |
   TSoft AGI 자동 회수를 이 환경에 1회 설치한다.
   토큰 입력만 받으면 ~/.config/tsoft-agi/{token, agi-upload.py} + AGENTS.md / CLAUDE.md 자동 구성 + 첫 push 검증까지 끝낸다.
   사용자가 "AGI 설치", "AGI 연동", "TSoft AGI 설정", "새 PC에서 처음 사용", "agi-upload 설정"을 요청하거나 ~/.config/tsoft-agi/token 이 없는 상태에서 push가 필요할 때 호출한다.
-  이미 설치 끝난 환경에서는 ERP: skipped already-installed 로 빠진다.
+  이미 설치된 환경에서도 매번 template 최신본과 비교 후 다르면 자동 sync — 룰 변경 반영 보장.
 argument-hint: "[project-id]"
 ---
 
@@ -13,16 +13,19 @@ argument-hint: "[project-id]"
 목표: 사용자 손은 토큰 paste 1회만. 나머지 4단계는 모두 AI 자동.
 
 ## 0. 현재 상태 점검 (먼저 한 번)
-- 다음 5개를 검사하고 각 항목을 한 줄로 보고: ✅ 있음 / ✗ 없음 / ⚠ 부분
+- 다음 4개를 검사하고 각 항목을 한 줄로 보고: ✅ 있음 / ✗ 없음 / ⚠ 부분
   1. `~/.config/tsoft-agi/token`
   2. `~/.config/tsoft-agi/agi-upload.py`
   3. `~/.codex/AGENTS.md` (Codex/Cursor 환경) 또는 `~/.claude/CLAUDE.md` (Claude Code)
   4. 본문 안에 "TSoft AGI Push Policy" 섹션 존재 여부
-  5. **본문 안에 새 룰 마커 (`last-digest.txt` 또는 `Write 도구로`) 존재 여부** — 없으면 옛 룰 (2026-05 이전)
+
 - 분기:
-  - 1~4 다 ✅ + 5도 ✅ → **완전 새 룰 적용 상태**. 사용자에게 "설치 완료 상태. 검증만 진행할까요?" 묻고 작업 4로 점프.
-  - 1~4 다 ✅ + 5는 ✗ → **옛 룰 박혀있음**. 작업 3 의 마이그레이션 절차로 강제 진입 (skip 금지).
-  - 1~4 중 ✗ 있으면 → 통상 설치 흐름 (작업 1부터).
+  - **1, 2 중 ✗** 있으면 → 통상 설치 흐름 (작업 1, 2 진행)
+  - **그 외** (1, 2 다 ✅) → 작업 3 항상 진입 (template 최신본과 비교, 다르면 갱신)
+
+**핵심 원칙 (2026-05-19 갱신):** 사용자가 `/agi-setup` 을 명시적으로 호출했다는 것 자체가
+"최신 룰을 받겠다" 는 의도. "이미 설치돼 있으니 skip" 으로 빠지지 말 것.
+다만 사용자가 손댄 다른 섹션은 항상 보존 — 작업 3 의 섹션 단위 비교 + 백업 + 교체 절차로.
 
 ## 1. 토큰 저장 (사용자 입력 필요한 유일한 단계)
 - 사용자에게 안내:
@@ -47,36 +50,46 @@ argument-hint: "[project-id]"
     `curl -sL https://erp.t-soft.co.kr/static/agi-upload.py -o ~/.config/tsoft-agi/agi-upload.py`
 - 파일 이미 있으면 skip.
 
-## 3. AGENTS.md / CLAUDE.md 정책 merge (자동)
+## 3. AGENTS.md / CLAUDE.md 정책 sync (자동, 항상 진입)
 - 환경에 따라 대상 파일 결정:
   - Codex / Cursor → `~/.codex/AGENTS.md`
   - Claude Code  → `~/.claude/CLAUDE.md` (+ 프로젝트 루트에 `./.claude/CLAUDE.md` 가 있으면 프로젝트 컨텍스트만 추가)
-- template 가져오기 (이 plugin 의 `memory/agents.md.template` 본문):
+
+- **항상 template 최신본 fetch** (옛/새/없음 구분 없이):
   ```
   curl -sL https://raw.githubusercontent.com/ghostkkk/tsoft-agi/main/memory/agents.md.template -o /tmp/agi-template.md
   ```
-- **분기 — 작업 0 의 검사 5 (새 룰 마커) 결과 기준**:
 
-  **① 검사 5 = ✗ (옛 룰 박혀있음, 마이그레이션 필요)**:
-    1. 대상 파일을 `<file>.bak.<YYYYMMDD_HHMMSS>` 로 백업
-    2. 옛 § "TSoft AGI Auto Capture" / "TSoft AGI 자동 회수" / "TSoft AGI Push Policy" / "Secret Guard" 등
-       template 와 겹치는 섹션을 본문에서 **삭제**
-    3. 그 자리에 `/tmp/agi-template.md` 본문을 insert (이미 fetch 한 새 template)
-    4. 사용자가 손댄 다른 섹션 (예: "Response Rules") 은 보존
-    5. 한 줄 보고: "✅ 옛 룰 → 새 룰 마이그레이션 완료. 백업 = `<bak path>`"
+- **분기 (대상 파일 상태 + template 비교)**:
 
-  **② 검사 4 = ✗ (Push Policy 자체 없음, 첫 설치)**:
+  **① 대상 파일 없음 (첫 설치)**:
+    - 새로 생성 후 `/tmp/agi-template.md` 본문 그대로 저장.
+    - 한 줄 보고: "✅ 첫 설치 완료. 파일 = `<file>`"
+
+  **② 대상 파일 있음, 본문에 "TSoft AGI Push Policy" 없음 (옛 첫 설치 형식)**:
     - 대상 파일 끝에 `/tmp/agi-template.md` 본문을 append.
+    - 한 줄 보고: "✅ Push Policy 추가."
 
-  **③ 검사 4 = ✅ + 검사 5 = ✅ (이미 새 룰)**:
-    - skip. "이미 새 룰 적용 상태" 한 줄 보고.
+  **③ 대상 파일 있음, "TSoft AGI Push Policy" 있음**:
+    - template 본문에서 다음 섹션들을 추출:
+      - `## TSoft AGI 자동 회수 — ...`
+      - `## TSoft AGI Push Policy ...`
+      - `## Skill 호출 가이드`
+    - 대상 파일의 해당 섹션들과 본문 비교 (whitespace normalize 후):
+      - **모두 동일** → skip. 한 줄 보고: "✓ 이미 최신 룰 (변경 없음)."
+      - **하나라도 다름** → 대상 파일을 `<file>.bak.<YYYYMMDD_HHMMSS>` 로 백업 + 해당 섹션들만
+        template 본문으로 교체 (사용자 손댄 다른 섹션은 보존).
+        한 줄 보고: "✅ 룰 갱신 완료. 백업 = `<bak path>` · 변경된 섹션: <목록>"
 
-- 절대 통째 덮어쓰지 말 것 — 항상 백업 + 섹션 단위 교체.
+- **핵심 원칙**: 사용자가 `/agi-setup` 명시 호출 = "최신 받겠다" 의도.
+  "이미 설치돼 있으니 skip" 으로 빠지지 말고 항상 template 과 비교, 다르면 갱신.
+  단, 절대 통째 덮어쓰지 말 것 — 백업 + 섹션 단위 교체로 사용자 손댄 부분 보존.
 
-### 핵심 변경 (2026-05): Write 도구 → 파일 방식
-이전 룰 ("응답 본문 마지막에 `<agi-digest>` 텍스트 첨부") 는 폐기.
-새 룰: Write 도구로 `~/.claude/agi_hook/last-digest.txt` 에 저장 → transcript 안 `tool_use.input.file_text` 로 서버 fast-path 가 추출.
-사용자 채팅창에 큰 blob 노출되지 않음.
+### 변경 이력 (참고)
+- 2026-05-19: Write 도구 → `~/.claude/agi_hook/last-digest.txt` 파일 저장 방식
+- 2026-05-19: RAW 13 sub-header 표준화
+- 2026-05-19: phase 별 commit 그룹화 + PreToolUse hook 알림
+- 2026-05-19: `/agi-setup` 매번 호출 시 sync 보장 (이 문서)
 
 ## 4. 검증 push (자동)
 - 다음 셸 명령 실행:
