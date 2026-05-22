@@ -40,15 +40,35 @@ argument-hint: "[project-id]"
   - `~/.config/tsoft-agi/token` 에 줄바꿈/공백 없이 저장 (이미 있으면 `token.bak` 으로 백업 후 교체)
   - **토큰 평문은 응답에 다시 출력하지 말 것**. 마스킹 형태(`abc12345…xyz789`)로만 확인 메시지.
 
-## 2. 업로더 설치 (자동)
-- `~/.config/tsoft-agi/agi-upload.py` 가 없으면 다음 중 한 가지로 가져옴:
-  - **(a) skill 패키지에 동봉된 사본 사용** (권장):
-    `cp <plugin-root>/files/agi-upload.py ~/.config/tsoft-agi/agi-upload.py`
-  - **(b) GitHub raw 다운로드**:
-    `curl -sL https://raw.githubusercontent.com/ghostkkk/tsoft-agi/main/files/agi-upload.py -o ~/.config/tsoft-agi/agi-upload.py`
-  - **(c) AGI 서버에서 fetch** (서버가 정적 파일로 노출 시):
-    `curl -sL https://erp.t-soft.co.kr/static/agi-upload.py -o ~/.config/tsoft-agi/agi-upload.py`
-- 파일 이미 있으면 skip.
+## 2. 업로더 설치 / 갱신 (자동, 항상 진입)
+
+우선순위 (위에서 아래로 시도, 첫 성공에서 stop):
+
+- **(a) AGI 서버 endpoint (권장 — 항상 latest + 자동 self-update 코드 포함, sha 검증):**
+  - 한 줄 install (가장 간단):
+    - Windows PowerShell:
+      `irm https://erp.t-soft.co.kr/api/agi-upload/install-script?platform=powershell | iex`
+    - Linux / Mac bash:
+      `curl -fsS https://erp.t-soft.co.kr/api/agi-upload/install-script?platform=bash | bash`
+  - 또는 raw source endpoint (수동 sha 검증 시):
+    `curl -fsS https://erp.t-soft.co.kr/api/agi-upload/source -o ~/.config/tsoft-agi/agi-upload.py`
+    응답 헤더의 `X-Source-Sha256` 와 `sha256(file)` 비교 (불일치 시 rollback).
+
+- **(b) skill 패키지에 동봉된 사본 (offline fallback):**
+  `cp <plugin-root>/files/agi-upload.py ~/.config/tsoft-agi/agi-upload.py`
+  ⚠ 옛 사본 (`__version__` 없거나 1.2 이하) 가능 — 설치 직후 `python ~/.config/tsoft-agi/agi-upload.py --self-update` 1회 호출해서 latest 진입 권장.
+
+- **(c) GitHub raw fallback:**
+  `curl -fsS https://raw.githubusercontent.com/ghostkkk/tsoft-agi/main/files/agi-upload.py -o ~/.config/tsoft-agi/agi-upload.py`
+  ⚠ 옛 사본 가능 — 위와 동일 `--self-update` 권장.
+
+### 이미 있는 경우 (idempotent)
+```
+python ~/.config/tsoft-agi/agi-upload.py --version
+```
+- `1.3.0` 이상: 다음 ingest 호출 시 자동 self-update 동작. **추가 작업 X.**
+- `1.0 ~ 1.2.x`: 한 번 `python ~/.config/tsoft-agi/agi-upload.py --self-update` 실행 또는 (a) one-liner 재실행 → 즉시 latest.
+- 그 외 (version 없음): 옛 사본 — `--self-update` 또는 (a) 재실행 필수.
 
 ## 3. AGENTS.md / CLAUDE.md 정책 sync (자동, 항상 진입)
 - 환경에 따라 대상 파일 결정:
