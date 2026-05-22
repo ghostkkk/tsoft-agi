@@ -2,7 +2,7 @@
 name: agi-setup
 description: |
   TSoft AGI 자동 회수를 이 환경에 1회 설치한다.
-  토큰 입력만 받으면 ~/.config/tsoft-agi/{token, agi-upload.py} + AGENTS.md / CLAUDE.md 자동 구성 + 첫 push 검증까지 끝낸다.
+  실행 즉시 (운영자 paste 0): 유효 토큰 자동 발급/재사용 + ~/.config/tsoft-agi/{tokens/<id>.token, agi-upload.py} + AGENTS.md / CLAUDE.md 자동 구성 + 첫 push 검증까지 끝낸다.
   사용자가 "AGI 설치", "AGI 연동", "TSoft AGI 설정", "새 PC에서 처음 사용", "agi-upload 설정"을 요청하거나 ~/.config/tsoft-agi/token 이 없는 상태에서 push가 필요할 때 호출한다.
   이미 설치된 환경에서도 매번 template 최신본과 비교 후 다르면 자동 sync — 룰 변경 반영 보장.
 argument-hint: "[project-id]"
@@ -10,11 +10,11 @@ argument-hint: "[project-id]"
 
 # AGI Setup — 한 번 설치하면 끝
 
-목표: 사용자 손은 토큰 paste 1회만. 나머지 4단계는 모두 AI 자동.
+목표: 사용자 손 0 (토큰 자동 발급). 5단계 전부 AI 자동.
 
 ## 0. 현재 상태 점검 (먼저 한 번)
 - 다음 4개를 검사하고 각 항목을 한 줄로 보고: ✅ 있음 / ✗ 없음 / ⚠ 부분
-  1. `~/.config/tsoft-agi/token`
+  1. `~/.config/tsoft-agi/tokens/<project_id>.token` (또는 legacy `~/.config/tsoft-agi/token`)
   2. `~/.config/tsoft-agi/agi-upload.py`
   3. `~/.codex/AGENTS.md` (Codex/Cursor 환경) 또는 `~/.claude/CLAUDE.md` (Claude Code)
   4. 본문 안에 "TSoft AGI Push Policy" 섹션 존재 여부
@@ -27,18 +27,54 @@ argument-hint: "[project-id]"
 "최신 룰을 받겠다" 는 의도. "이미 설치돼 있으니 skip" 으로 빠지지 말 것.
 다만 사용자가 손댄 다른 섹션은 항상 보존 — 작업 3 의 섹션 단위 비교 + 백업 + 교체 절차로.
 
-## 1. 토큰 저장 (사용자 입력 필요한 유일한 단계)
-- 사용자에게 안내:
-  ```
-  1) https://erp.t-soft.co.kr/projects/<project-id>/integrations 열기
-     (project-id 인자 받았으면 그대로 사용. 없으면 사용자에게 묻기.)
-  2) 상단 🔑 Ingest 토큰 패널에서 [+ 새 토큰 발급] → 평문 복사
-  3) 여기 채팅에 paste 해주세요
-  ```
-- 사용자가 paste한 토큰을 받으면:
-  - `~/.config/tsoft-agi/` 디렉토리 없으면 생성
-  - `~/.config/tsoft-agi/token` 에 줄바꿈/공백 없이 저장 (이미 있으면 `token.bak` 으로 백업 후 교체)
-  - **토큰 평문은 응답에 다시 출력하지 말 것**. 마스킹 형태(`abc12345…xyz789`)로만 확인 메시지.
+## 1. 토큰 확보 (자동 — 운영자 paste 0)
+
+목표: 운영자 손은 setup_prompt 복사 붙여넣기 1회만. 토큰도 AI 가 자동 발급.
+
+### 1.A — 기존 활성 토큰 재사용 (먼저)
+프로젝트에 이미 발급된 활성 토큰이 있으면 그것을 그대로 사용 (중복 발급 X).
+
+```
+curl -fsS https://erp.t-soft.co.kr/api/projects/<project_id>/ingest-tokens
+```
+
+응답에서 다음 조건의 첫 entry 채택:
+- `revoked_at` 이 null
+- `expires_at` 이 null 또는 현재 시각 이후
+- `scope` 가 `write` 또는 `admin`
+
+→ 발견됐으면 그 `token` 값 사용 + 1.C 로.
+
+### 1.B — 없으면 새로 발급 (자동)
+1.A 결과 활성 토큰 0 개면 즉시 발급:
+
+```
+curl -fsS -X POST https://erp.t-soft.co.kr/api/projects/<project_id>/ingest-tokens \
+  -H "Content-Type: application/json" \
+  -d '{"label": "agi-setup auto", "scope": "write"}'
+```
+
+응답의 `token` 평문 (1회 노출) 받음 → 1.C 로.
+
+### 1.C — 토큰 저장
+- `~/.config/tsoft-agi/tokens/` 디렉토리 없으면 생성 (`mkdir -p`)
+- `~/.config/tsoft-agi/tokens/<project_id>.token` 에 token 평문 저장 (줄바꿈/공백 X, 권한 600 권장)
+- 이미 다른 token 파일 있으면 `.bak.<ts>` 로 백업 후 교체
+
+### 1.D — project_map.yaml 매핑
+`~/.config/tsoft-agi/project_map.yaml` 에 cwd 매핑 추가 (이미 있으면 skip):
+```yaml
+projects:
+  - match:
+      cwd_prefix: "<이 프로젝트의 cwd 절대 경로>"
+    project_id: "<project_id>"
+    token_file: "~/.config/tsoft-agi/tokens/<project_id>.token"
+```
+
+### 안전 규칙
+- **토큰 평문은 응답/로그에 절대 X**. 확인 메시지엔 마스킹만 (`abc12345…xyz789` 형태).
+- 운영자가 직접 paste 한 토큰을 주면 그것을 우선 사용 (자동 발급 skip). 명시 의도 존중.
+- 발급 직후 첫 push 검증 (작업 5) 으로 토큰 동작 확인.
 
 ## 2. 업로더 설치 / 갱신 (자동, 항상 진입)
 
