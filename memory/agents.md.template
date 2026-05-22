@@ -1,243 +1,82 @@
-# AGENTS.md — TSoft AGI 통합 정책
+# AGENTS.md — TSoft AGI 자동 회수 (v2.1, 2026-05-23)
 
-> 이 섹션은 `tsoft-agi` plugin의 `/agi-setup` 이 `~/.codex/AGENTS.md` (Codex/Cursor)
-> 또는 `~/.claude/CLAUDE.md` (Claude Code) 에 merge한다.
-> 이미 같은 섹션이 있으면 skip, 없으면 append. **기존 파일을 덮어쓰지 않는다.**
+> Codex CLI 의 `~/.codex/AGENTS.md` 에 merge.
+> 이미 같은 섹션이 있으면 백업 후 교체. **기존 파일 통째 덮어쓰지 않는다.**
 
-## TSoft AGI 자동 회수 — `<agi-digest>` 블록 (9-field 표준)
+## TSoft AGI 자동 회수 — `<agi-digest>` 블록
 
-이 환경에서 한 응답은 TSoft AGI 서버(https://erp.t-soft.co.kr/) 로 자동 회수된다.
+이 환경에서 한 응답은 TSoft AGI 서버 (https://erp.t-soft.co.kr/) 로 **시스템 차원 자동 회수** 된다.
 
-### 첨부 방식 — 응답 본문 X, 파일에 Write
+### 핵심 원칙 (v2.1)
 
-**의미 있는 변화가 있는 응답의 마지막에** Write 도구로 다음 파일에 디지스트를 저장한다.
-**응답 본문에 텍스트로 노출하지 말 것.** 사용자 채팅창에는 Write 도구 호출 한 줄만 보이는 게 정상.
+> **AI 는 응답 끝에 `<agi-digest>` 블록만 적는다. 그게 전부.**
+>
+> push / Memory inject / 첨부 / 운영자 지시 받기 — 모두 Codex hook 가 자동 처리.
+> AI 가 능동적으로 명령 실행 / 도구 호출 X.
 
-- 파일 경로: `~/.claude/agi_hook/last-digest.txt`  (Claude Code)
-  또는 `~/.codex/agi_hook/last-digest.txt`        (Codex)
-  또는 환경에 맞는 위치
-- 내용 형식 (9-field):
+### 블록 형식 (9-field)
+
+응답의 **맨 마지막**에 다음 블록 추가:
 
 ```
 <agi-digest>
-RAW: 자세한 원본 기록 — 아래 RAW 작성 가이드 참조 (크기 제한 없음)
-SUMMARY: 1~2문장 (검색/리스트용 short label)
+RAW:
+[USER_PROMPT] 사용자 요청 원문
+[AI_RESPONSE] 본인 응답 핵심
+[CURRENT_TASK] 지금 진행 중인 작업 한 줄
+[CONTEXT] 이번 turn 시작 시점의 컨텍스트
+[RESULT] 이 turn 으로 무엇이 끝났나
+[AI_OPINION] (있을 때) AI 가 한 판단 / 권장
+[SELECT_Q] (있을 때) 사용자에게 한 선택 질문
+[SELECT_A] (있을 때) 직전 turn 사용자가 준 답
+[GIT_HEAD] <sha> <branch> [dirty|clean]
+[TOOLS_USED] Bash:OK · Edit×3 · Read×7 ...
+[FILES_TOUCHED] EDIT path · WRITE path · ...
+[ERRORS] (있을 때) 실패한 명령
+[VALIDATION] (검증 한 경우) tsc:OK · pytest:passed ...
+SUMMARY: 1~2문장 short label
 DECISIONS:
-- (새로 합의된 결정, 한 항목당 1줄)
+- (새 결정 한 항목당 1줄)
 TASKS:
-- (새로 생긴 할일)
+- (새 할일)
 RISKS:
 - [low|medium|high] (발견된 리스크)
 DEPRECATED:
-- (폐기된 방향) → replaced_by: (대체 방향)
+- (폐기 방향) → replaced_by: (대체)
 OPEN_QUESTIONS:
-- (아직 미해결 질문)
+- (미해결 질문)
 ARTIFACTS:
-- (이번 turn 에서 만든/수정된 파일 path / URL / commit / PR)
+- (이번 turn 의 산출물 path/URL/commit/PR)
 NEXT_CONTEXT:
-- (다음 AI 세션이 이어받아야 할 컨텍스트)
+- (다음 세션이 이어받아야 할 컨텍스트)
 </agi-digest>
 ```
 
-### 작동 원리 (Hook 기반 환경 — Claude Code / Codex CLI)
+### 작성 규칙
 
-1. AI 가 Write 도구로 last-digest.txt 저장
-2. Write 호출이 transcript JSONL 안 `tool_use` 메시지의 `input.file_text` 에 들어감
-3. Stop hook (`agi_stop_hook.py`) 이 transcript 통째로 서버에 push
-4. 서버 fast-path regex 가 file_text 안 `<agi-digest>` 블록을 추출 → Digest 생성
-5. 사용자 채팅창엔 큰 블록 노출 X — Write 호출 한 줄만 보임
+1. **변화 있는 turn 에만** — 단순 조회/짧은 답변엔 생략
+2. **응답 본문에 그대로 노출** — Hook 가 transcript 에서 추출
+3. RAW sub-header 5개 필수 (`USER_PROMPT` / `AI_RESPONSE` / `CURRENT_TASK` / `CONTEXT` / `RESULT`)
+4. 한 항목 한 줄, 크기 제한 X (자세히 적기)
+5. 동일 결정 반복 X
 
-### Hook 없는 환경 (ChatGPT 웹 / Claude.ai 웹)
+### 자동으로 일어나는 것 (AI 가 신경 안 씀)
 
-Stop hook 이 없으므로:
-1. AI 가 디지스트 텍스트를 임시 파일로 저장
-2. `python ~/.config/tsoft-agi/agi-upload.py --file <tmp> --source-tool <agent> --quiet` 실행
-3. 또는 응답 본문 마지막에 직접 첨부 (fallback)
+- **push**: Stop hook 가 매 turn 끝에 transcript 전체 + git/originator metadata 자동 전송
+- **첨부**: 응답에서 만든 파일 (`Write` / `Edit` 결과 + Bash 가 만든 binary) 자동 첨부
+- **Memory inject**: 새 thread 시작 시 SessionStart hook 가 project memory 자동 inject
+- **운영자 지시**: 같은 SessionStart 가 pending instructions 도 같이 inject (있으면 응답 시작 시 인지)
+- **Worker 매핑**: `~/.codex/auth.json` 의 account_id 로 자동 식별
+- **Workstream 분류**: thread title 키워드로 자동 매칭
+- **git 정보**: Codex 가 매 session 자동 추적 (branch/commit_hash/repo_url)
 
-### RAW 작성 가이드 — 13 sub-header 표준 (2026-05-19 도입)
+AI 는 위 어느 것도 명령 실행 / 도구 호출 안 함. 응답에 `<agi-digest>` 블록 적으면 끝.
 
-RAW field 는 자유 텍스트가 아니라 **표준 sub-header 로 구조화**한다.
-검색 / 추적 가능성 + AI 가 빠짐없이 작성 + UI 정확 추출이 목적.
+### Secret 가드
 
-13 sub-header — 필수 5 + 조건부 8:
-
-```
-RAW:
-[USER_PROMPT]
-사용자가 이 turn 에 보낸 원문 (그대로 인용, >= 1줄). 필수.
-
-[AI_RESPONSE]
-AI 가 응답 본문에 쓴 핵심 (요약 X, 의사결정/설명 부분 그대로 발췌). 필수.
-
-[CURRENT_TASK]
-지금 진행 중인 큰 작업 한 줄. 필수.
-
-[CONTEXT]
-이번 turn 시작 시점의 컨텍스트 (직전 turn 들 / 결정 / 운영 상태). 필수.
-
-[RESULT]
-이 turn 으로 무엇이 끝났나 (요약 1~2줄). 필수.
-
-[AI_OPINION]
-AI 가 한 판단 / 권장. 사용자에게 보고한 의견. (있을 때만)
-
-[SELECT_Q]
-AI 가 사용자에게 한 선택 질문 (있을 때만)
-
-[SELECT_A]
-직전 turn 에 사용자가 준 선택의 답 (이 turn 의 진행 근거가 됐다면)
-
-[GIT_HEAD]
-현재 작업 디렉토리의 git 상태. 코드 작업일 때 필수.
-형식: `<sha> <branch> [dirty|clean]`
-획득: `git rev-parse HEAD` + `git status --porcelain | wc -l`
-
-[TOOLS_USED]
-사용한 도구 + 결과 status. 한 줄로.
-예: `Bash:OK · Edit×3 · Read×7 · WebFetch:200 · Write:OK`
-
-[FILES_TOUCHED]
-변경/조회/삭제한 파일들. EDIT/WRITE/READ/DELETE prefix.
-예: `EDIT backend/app/foo.py · WRITE configs/bar.json · READ x10`
-
-[ERRORS]
-turn 중 만난 실패. 없으면 섹션 자체 생략.
-예: `tsc:exit=1 unused var · curl:502 retry → 200`
-
-[VALIDATION]
-변경 후 검증 결과. 검증 안 한 turn 은 생략.
-예: `frontend tsc:OK · backend deploy:OK · API healthz:200`
-```
-
-5개 필수는 거의 모든 의미 있는 turn 에 포함. 조건부 8개는 해당 사실이 있을 때만 — 억지로 채우지 말 것.
-크기 제한 X. 수십~수백 줄 OK.
-
-### 큰 turn (30분+ 또는 phase 5+) — phase 별 분할 push
-
-한 turn 의 작업이 길면 마지막 last-digest.txt 하나로 압축하지 말고 각 phase 끝마다 별도 commit:
-
-```
-# 1. 새 turn 시작 시 reset
-python ~/.config/tsoft-agi/agi-upload.py --phase-reset --quiet
-
-# 2. 각 phase 끝에서 (임시 파일은 UTF-8 no BOM)
-python ~/.config/tsoft-agi/agi-upload.py --file <tmp> --phase --source-tool <agent> --quiet
-
-# 3. 마지막 last-digest.txt 의 RAW 에 다음 sub-header 추가:
-#    [PHASE_GROUP] <위에서 발급된 group id>
-#    [PHASE_KIND] final
-```
-
-`--phase` 옵션이 phase_group 자동 발급/재사용 + seq 자동 증가.
-효과: 시간순 timeline 이 commit list 로, phase 별 부분 merge/reject 가능, 시점별 메타 보존.
-작은 turn 은 phase push 생략 (last-digest.txt 한 번만).
-
-#### PreToolUse hook 알림 (자동 신호)
-
-매 5번째 변경성 tool 호출 (Edit / Write / Bash / NotebookEdit) 후 stderr 에:
-```
-⏱ AGI: 누적 N 변경성 tools — phase push 고려.
-```
-
-이 신호는 `scripts/agi_pretool_hook.py` 가 자동 생성 (session 별 카운트).
-AI 가 이 알림 보면:
-1. 직전 변경 사항이 1 phase 로 묶이기 좋은지 판단
-2. 좋으면 phase 디지스트 + `agi-upload.py --phase` 호출
-3. 아직 묶기 어려우면 무시 — 다음 5번 째 알림 기다림
-
-설치: `scripts/agi_pretool_hook.py` 가 PC 에 있고, `~/.claude/settings.json` 또는
-`~/.codex/config.toml` 의 PreToolUse hook 에 등록돼야 작동.
-
-### 필수 규칙
-
-1. **변화가 있을 때만 Write 호출.** 단순 정보 조회 / 답변 / 짧은 확인엔 생략.
-2. 해당 항목이 없는 섹션은 `- none` 또는 섹션 생략.
-3. 한 항목 한 줄, 너무 길면 핵심만 (RAW 는 예외 — 풍부하게).
-4. 동일 결정 반복 첨부 금지.
-5. **응답 본문에 텍스트로 노출 금지** — Write 도구로 파일에만.
-6. SUMMARY는 자유 문장, 나머지는 `- 항목` 형식.
-7. 파일은 매 turn 덮어쓰기 (append X).
-
-서버가 `<agi-digest>` 발견 시 LLM 추출 호출을 생략한다 (비용 $0, 정확도 100%).
-
----
-
-## TSoft AGI Push Policy (누락 방지 강화)
-
-### Push 대상 (의지로 판단하지 말고 무조건 push)
-- 코드 수정 / 새 파일 생성
-- 테스트 결과 / 성능 수치 / 디버그 결론
-- 설계 결정 / 아키텍처 변경
-- 작업 계획 / 튜닝 항목 / 다음 단계 정리
-- 원인 분석 / 트러블슈팅 결과
-- 운영 판단 ("이걸로 가자", "이건 폐기")
-
-### Push 생략 가능
-- 단순 인사 / "네" / "확인" / 3줄 미만 답변
-- 버튼 위치 같은 단순 안내
-- 단순 보고 / 결과 확인 / 의견 비교 / 옵션 제시
-- 이미 직전 turn에 push한 내용 반복
-- 응답에 토큰 / API key / 비밀번호 정규식 매치 — **자동 skip + 사유 보고**
-
-### 매 응답 직전 4단계 체크리스트
-1. 이 응답에 위 'Push 대상' 항목이 있는가?
-2. 있으면 `<agi-digest>` 9-field 블록을 구성.
-3. **Hook 기반 환경**: Write 도구로 `~/.claude/agi_hook/last-digest.txt` (또는 환경별 경로) 에 저장. 끝.
-   **Hook 없는 환경**: **반드시 `--file` 옵션 사용** (stdin pipe 금지 — Windows PowerShell 에서 한글 깨짐):
-
-   - **Windows PowerShell** (한글 디지스트는 stdin pipe 절대 금지):
-     ```powershell
-     $tmp = "$env:TEMP\agi-digest-$(Get-Date -Format yyyyMMddHHmmss).txt"
-     [System.IO.File]::WriteAllText($tmp, $digest, (New-Object System.Text.UTF8Encoding($false)))
-     python "$env:USERPROFILE\.config\tsoft-agi\agi-upload.py" --file $tmp --source-tool <agent> --quiet
-     Remove-Item $tmp
-     ```
-     `Out-File -Encoding utf8NoBOM` 도 동일 효과 (PowerShell 6+).
-
-   - **bash (macOS / Linux)**:
-     ```bash
-     tmp=$(mktemp); printf '%s' "$digest" > "$tmp"
-     python ~/.config/tsoft-agi/agi-upload.py --file "$tmp" --source-tool <agent> --quiet
-     rm "$tmp"
-     ```
-
-4. **응답 본문에 디지스트 텍스트 직접 노출 금지** — 무조건 파일 경유.
-
-> **Windows PowerShell + stdin pipe 함정**: `$digest | python agi-upload.py --quiet` 는
-> PowerShell 의 native pipe 가 UTF-8 bytes 를 보장하지 않아 한글이 `?` 로 깨짐.
-> 업로더가 cp949/utf-16 fallback 을 시도하지만 PowerShell 이 *이미 깨뜨린 바이트* 는 복구 불가.
-> Windows 에서는 **무조건 `--file` 경로**.
-
-### 응답 맨 마지막 한 줄 자체 점검 라인
-
-**Hook 기반 환경** (Claude Code / Codex CLI): hook 이 응답 종료 후 자동 push 하므로 commit_id 를 응답 시점에 알 수 없다. 자체 점검 라인은 생략하거나:
-- `ERP: pending hook-push` (디지스트 첨부함, hook 이 push 예정)
-- `ERP: skipped <reason>` (이번 turn 디지스트 안 만듦)
-
-**Hook 없는 환경**: 다음 셋 중 하나를 응답의 *맨 마지막 줄*에 출력:
-- `ERP: pushed commit=<id>`         (agi-upload.py 가 반환한 commit id)
-- `ERP: skipped <reason>`
-- `ERP: failed <reason>`
-
-### Secret 가드 (자동 skip)
-응답에 다음 패턴이 보이면 디지스트 생성 자체를 skip 하고 사유 보고:
-- `sk-[A-Za-z0-9_-]{20,}` (OpenAI/Anthropic 류 키)
+응답에 다음 패턴 detect 시 — `<agi-digest>` 안에 평문 노출 금지:
+- `sk-[A-Za-z0-9_-]{20,}` (OpenAI/Anthropic 키)
 - `ghp_|github_pat_` 시작 토큰
-- `AGI_TOKEN=` 또는 `~/.config/tsoft-agi/token` 의 평문 내용
-- 비밀번호 / DB connection string
+- `AGI_TOKEN=` / 비밀번호 / DB connection string
 
-토큰은 `~/.config/tsoft-agi/token` 에 저장돼 있고 업로더가 자동 조회한다.
-**응답 본문에 토큰 평문 절대 노출 X.**
-
----
-
-## Skill 호출 가이드
-
-사용자가 다음을 요청하면 대응 Skill 호출:
-
-| 사용자 의도 | Skill |
-|---|---|
-| 환경 설치 / AGI 연동 / 새 PC 설정 | `/agi-setup` |
-| 프로젝트 초기 문서 작성 / charter / Memory 채우기 | `/agi-charter` |
-| Reminder Pack / Memory snapshot / 다른 도구로 컨텍스트 이관 | `/agi-pack` |
-| commit 검토 / candidate merge / AGI 정리 | `/agi-review` |
+마스킹 처리 (`abc123…xyz` 형태) 후 첨부.
