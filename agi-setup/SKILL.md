@@ -18,19 +18,60 @@ argument-hint: "[project-id]"
 
 목표: 사용자 손 0. Codex hook 가 자동 회수 / 공급. AI 는 응답에 `<agi-digest>` 적기만.
 
-## 0. 현재 상태 점검 (먼저 한 번, Windows)
+## 0. Prerequisite + 현재 상태 점검 (Windows)
+
+### 0.A — Prerequisite 검사 (STOP gate)
+
+먼저 **PC 당 1회 install 이 됐는지** 확인:
+
+```powershell
+Test-Path "$env:USERPROFILE\.config\tsoft-agi\agi-upload.py"
+```
+
+- **✗ 없음** → 즉시 STOP + 다음 안내 후 종료:
+  ```
+  ❌ agi-upload.py 가 없습니다 (PC 당 1회 install 누락).
+
+  PowerShell 창 열고 다음 한 줄 실행 후 다시 /agi-setup 호출:
+    irm https://erp.t-soft.co.kr/api/agi-upload/install-script?platform=powershell | iex
+
+  이 install-script 가 자동 처리:
+    [1/2] agi-upload.py 설치
+    [2/2] tsoft-agi skill 갱신 (npx)
+  ```
+- **✅ 있음** → 다음 검사 (0.B).
+
+### 0.B — 프로젝트별 상태 점검
 
 검사 + 한 줄 보고 (✅ 있음 / ✗ 없음 / ⚠ 부분):
   1. `%USERPROFILE%\.config\tsoft-agi\tokens\<project_id>.token`
   2. `%USERPROFILE%\.config\tsoft-agi\agi-upload.py` (`--version` 으로 확인, 1.4.0 이상)
   3. `%USERPROFILE%\.codex\hooks.json` 의 Stop / SessionStart hook 등록
   4. `%USERPROFILE%\.codex\AGENTS.md` 의 "TSoft AGI 자동 회수" 섹션 (v2.1 형식)
+  5. `%USERPROFILE%\.config\tsoft-agi\project_map.yaml` 에 현재 cwd → project_id 매핑
 
-- **1, 2, 3, 4 다 ✅** → 작업 4 (template 갱신 검사) 만 진입
-- **하나라도 ✗** → 통상 설치 흐름
+- **1~5 다 ✅** → 작업 4 (template 갱신 검사) 만 진입
+- **하나라도 ✗** → 통상 설치 흐름 (작업 1~5 진행)
 
-**핵심 원칙 (v2.1, 2026-05-23):** AI 는 AGI 에게 능동 행동 X.
-오직 응답에 `<agi-digest>` 적기만. push / inject / 첨부 / Worker 매핑 — 시스템 hook 자동.
+### 0.C — 흐름 원칙 (v2.1, 2026-05-23)
+
+```
+PowerShell `irm ... | iex`   = PC 당 1번  (전역 install)
+                              · agi-upload.py 배치
+                              · tsoft-agi skill (npx) 갱신
+/agi-setup <project_id>      = 프로젝트당 1번 (cwd 매핑)
+                              · 토큰 발급 / 재사용
+                              · AGENTS.md v2.1 sync
+                              · hooks.json 의 Stop/SessionStart 등록
+                              · project_map.yaml 에 현재 cwd → project_id
+                              · 첫 push 검증
+```
+
+같은 PC 에 다른 프로젝트 추가 시 → 그 project cwd 에서 Codex 열고 `/agi-setup <new_id>` 만.
+PowerShell install 은 재실행 안 함 (이미 PC 에 있음).
+
+**AI 능동 행동 금지**: 모든 자동화는 시스템 hook + 운영자 명시 명령 (`/agi-setup`) 만.
+AI 가 자기 의지로 AGI 에 조회/변경 X. 응답 끝에 `<agi-digest>` 적기만.
 
 ## 1. 토큰 확보 (자동)
 
