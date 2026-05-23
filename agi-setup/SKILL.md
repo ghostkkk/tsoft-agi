@@ -1,220 +1,78 @@
 ---
 name: agi-setup
 description: |
-  TSoft AGI 자동 회수를 Codex CLI (Windows) 환경에 1회 설치한다.
-  실행 즉시 (운영자 paste 0): 유효 토큰 자동 발급/재사용 +
-  %USERPROFILE%\.config\tsoft-agi\{tokens\<id>.token, agi-upload.py} 배치 +
-  %USERPROFILE%\.codex\hooks.json 의 Stop/SessionStart hook 등록 +
-  %USERPROFILE%\.codex\AGENTS.md 단순화 (v2.1 원칙) +
-  첫 push 검증까지 끝낸다.
-  사용자가 "AGI 설치", "AGI 연동", "TSoft AGI 설정", "새 PC에서 처음 사용",
-  "agi-upload 설정" 을 요청하거나 ~/.config/tsoft-agi/tokens/ 가 빈 상태에서
-  push 가 필요할 때 호출.
-  이미 설치된 환경에서도 매번 template 최신본과 비교 후 다르면 자동 sync.
-argument-hint: "[project-id]"
+  TSoft AGI 자동 회수를 Codex CLI (Windows) 환경에 1회 설치.
+  토큰 자동 발급/재사용 + AGENTS.md sync + hooks.json 등록 + 첫 push 검증.
+  "AGI 설치/연동/설정" 또는 처음 사용 시 호출.
+argument-hint: "<project-id>"
 ---
 
-# AGI Setup — 한 번 설치하면 끝 (v2.1)
+# AGI Setup (v2.1, Windows-only, Codex 전용)
 
-목표: 사용자 손 0. Codex hook 가 자동 회수 / 공급. AI 는 응답에 `<agi-digest>` 적기만.
+**핵심 원칙**: AI 는 응답 끝에 `<agi-digest>` 만 적기. push/inject/첨부 모두 Codex hook 자동.
 
-## 0. Prerequisite + 현재 상태 점검 (Windows)
+## 0. Prerequisite (STOP gate)
 
-### 0.A — Prerequisite 검사 (STOP gate)
-
-먼저 **PC 당 1회 install 이 됐는지** 확인:
-
-```powershell
-Test-Path "$env:USERPROFILE\.config\tsoft-agi\agi-upload.py"
+`%USERPROFILE%\.config\tsoft-agi\agi-upload.py` 존재 확인 (`Test-Path`).
+**없으면 즉시 STOP** + 안내:
+```
+❌ agi-upload.py 누락 — PowerShell 한 줄 먼저 실행:
+   irm https://erp.t-soft.co.kr/api/agi-upload/install-script?platform=powershell | iex
 ```
 
-- **✗ 없음** → 즉시 STOP + 다음 안내 후 종료:
-  ```
-  ❌ agi-upload.py 가 없습니다 (PC 당 1회 install 누락).
+## 1. 토큰 (자동)
 
-  PowerShell 창 열고 다음 한 줄 실행 후 다시 /agi-setup 호출:
-    irm https://erp.t-soft.co.kr/api/agi-upload/install-script?platform=powershell | iex
+`<project-id>` 의 활성 토큰 list → 첫 활성 사용. 없으면 새로 발급:
+- `GET  /api/projects/<id>/ingest-tokens` (활성 = `revoked_at`/`expires_at` null, scope=write|admin)
+- `POST /api/projects/<id>/ingest-tokens` body `{"label":"agi-setup","scope":"write"}` (없을 때만)
 
-  이 install-script 가 자동 처리:
-    [1/2] agi-upload.py 설치
-    [2/2] tsoft-agi skill 갱신 (npx)
-  ```
-- **✅ 있음** → 다음 검사 (0.B).
+`%USERPROFILE%\.config\tsoft-agi\tokens\<id>.token` 에 평문 저장 (UTF-8 no BOM, 줄바꿈 X).
+응답/로그엔 마스킹만 (`abc123…xyz`).
 
-### 0.B — 프로젝트별 상태 점검
+## 2. project_map.yaml
 
-검사 + 한 줄 보고 (✅ 있음 / ✗ 없음 / ⚠ 부분):
-  1. `%USERPROFILE%\.config\tsoft-agi\tokens\<project_id>.token`
-  2. `%USERPROFILE%\.config\tsoft-agi\agi-upload.py` (`--version` 으로 확인, 1.4.0 이상)
-  3. `%USERPROFILE%\.codex\hooks.json` 의 Stop / SessionStart hook 등록
-  4. `%USERPROFILE%\.codex\AGENTS.md` 의 "TSoft AGI 자동 회수" 섹션 (v2.1 형식)
-  5. `%USERPROFILE%\.config\tsoft-agi\project_map.yaml` 에 현재 cwd → project_id 매핑
-
-- **1~5 다 ✅** → 작업 4 (template 갱신 검사) 만 진입
-- **하나라도 ✗** → 통상 설치 흐름 (작업 1~5 진행)
-
-### 0.C — 흐름 원칙 (v2.1, 2026-05-23)
-
-```
-PowerShell `irm ... | iex`   = PC 당 1번  (전역 install)
-                              · agi-upload.py 배치
-                              · tsoft-agi skill (npx) 갱신
-/agi-setup <project_id>      = 프로젝트당 1번 (cwd 매핑)
-                              · 토큰 발급 / 재사용
-                              · AGENTS.md v2.1 sync
-                              · hooks.json 의 Stop/SessionStart 등록
-                              · project_map.yaml 에 현재 cwd → project_id
-                              · 첫 push 검증
-```
-
-같은 PC 에 다른 프로젝트 추가 시 → 그 project cwd 에서 Codex 열고 `/agi-setup <new_id>` 만.
-PowerShell install 은 재실행 안 함 (이미 PC 에 있음).
-
-**AI 능동 행동 금지**: 모든 자동화는 시스템 hook + 운영자 명시 명령 (`/agi-setup`) 만.
-AI 가 자기 의지로 AGI 에 조회/변경 X. 응답 끝에 `<agi-digest>` 적기만.
-
-## 1. 토큰 확보 (자동)
-
-운영자 paste 0 — AI 가 자동 발급.
-
-### 1.A — 기존 활성 토큰 재사용 먼저
-```
-curl -fsS https://erp.t-soft.co.kr/api/projects/<project_id>/ingest-tokens
-```
-응답에서 `revoked_at` null + `scope=write|admin` 첫 entry 채택 → 1.C 로.
-
-### 1.B — 없으면 자동 발급
-```
-curl -fsS -X POST https://erp.t-soft.co.kr/api/projects/<project_id>/ingest-tokens \
-  -H "Content-Type: application/json" \
-  -d '{"label": "agi-setup auto", "scope": "write"}'
-```
-
-### 1.C — 저장 (Windows)
-- `%USERPROFILE%\.config\tsoft-agi\tokens\` 디렉토리 생성 (없으면)
-- `%USERPROFILE%\.config\tsoft-agi\tokens\<project_id>.token` 에 token 평문 저장 (개행 없이, UTF-8 no BOM)
-- 기존 다른 token 파일 있으면 `.bak.<yyyyMMdd_HHmmss>` 백업 후 교체
-
-### 1.D — project_map.yaml 매핑
-`%USERPROFILE%\.config\tsoft-agi\project_map.yaml`:
+`%USERPROFILE%\.config\tsoft-agi\project_map.yaml` 의 `projects:` list 에 entry 추가 (같은 cwd 있으면 skip):
 ```yaml
-projects:
-  - match:
-      cwd_prefix: "D:/project/work/<프로젝트 cwd>"
-    project_id: "<project_id>"
-    token_file: "~/.config/tsoft-agi/tokens/<project_id>.token"
+- match:
+    cwd_prefix: "<현재 cwd 절대 경로>"
+  project_id: "<id>"
+  token_file: "~/.config/tsoft-agi/tokens/<id>.token"
 ```
 
-(yaml 안의 `~` 는 Windows 에서도 `%USERPROFILE%` 로 자동 expand — agi-upload.py 가 처리)
+## 3. hooks.json
 
-### 안전 규칙
-- 토큰 평문 응답/로그에 절대 X. 마스킹 (`abc12345…xyz789`) 만.
-- 운영자가 직접 paste 한 토큰 있으면 그것 우선 (자동 발급 skip).
-
-## 2. 업로더 설치 / 갱신 (자동, Windows PowerShell)
-
-운영 환경은 **Windows 전용**. PowerShell 한 줄:
-
-```powershell
-irm https://erp.t-soft.co.kr/api/agi-upload/install-script?platform=powershell | iex
-```
-
-- 항상 latest + 자동 self-update 포함
-- 이미 있는 PC 도 재실행 OK (idempotent)
-- `%USERPROFILE%\.config\tsoft-agi\agi-upload.py` 에 설치
-
-### 이미 있는 경우
-```powershell
-python "$env:USERPROFILE\.config\tsoft-agi\agi-upload.py" --version
-```
-- `1.4.0` 이상: OK (Stop hook 모드 지원, 자동 self-update 동작)
-- 그 이전: 위 install 한 줄 재실행 → 1.4.0+ 진입
-
-## 3. Codex Hooks 등록 (핵심, Windows)
-
-`%USERPROFILE%\.codex\hooks.json` 작성 (없으면 새로). 이미 있으면 백업 후 hook 항목 merge:
-
+`%USERPROFILE%\.codex\hooks.json` 에 Stop + SessionStart hook 등록 (기존 있으면 백업 후 merge):
 ```json
 {
   "hooks": {
-    "Stop": [
-      {
-        "matcher": "",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "python ~/.config/tsoft-agi/agi-upload.py --stop-hook",
-            "timeout": 30
-          }
-        ]
-      }
-    ],
-    "SessionStart": [
-      {
-        "matcher": "",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "python ~/.config/tsoft-agi/agi-upload.py --session-start",
-            "timeout": 15
-          }
-        ]
-      }
-    ]
+    "Stop":         [{"matcher":"","hooks":[{"type":"command","command":"python ~/.config/tsoft-agi/agi-upload.py --stop-hook","timeout":30}]}],
+    "SessionStart": [{"matcher":"","hooks":[{"type":"command","command":"python ~/.config/tsoft-agi/agi-upload.py --session-start","timeout":15}]}]
   }
 }
 ```
 
-이 등록이 끝나면:
-- 매 turn 종료 → Stop hook 가 transcript 자동 push (git/originator/Worker metadata 같이)
-- 새 thread 시작 → SessionStart 가 Memory + pending instructions 자동 inject
-- AI 는 응답에 `<agi-digest>` 적기만, 다른 명령 실행 X
+## 4. AGENTS.md sync
 
-## 4. AGENTS.md sync (단순, Windows)
+`irm https://raw.githubusercontent.com/ghostkkk/tsoft-agi/main/memory/agents.md.template -OutFile $env:TEMP\agi-template.md`
 
-template fetch:
-```powershell
-$tmpl = "$env:TEMP\agi-template.md"
-irm https://raw.githubusercontent.com/ghostkkk/tsoft-agi/main/memory/agents.md.template -OutFile $tmpl
-```
+대상 `%USERPROFILE%\.codex\AGENTS.md`:
+- 없음 → 새로 생성, template 본문 그대로
+- "TSoft AGI 자동 회수" 섹션 없음 → 끝에 append
+- 있음 + 본문 다름 → 백업 (`.bak.<yyyyMMdd_HHmmss>`) + 해당 섹션만 교체 (다른 섹션 보존)
+- 옛 "TSoft AGI Push Policy" 섹션 있으면 제거 (v2.1 에선 불필요)
 
-대상 = `%USERPROFILE%\.codex\AGENTS.md` (Codex 글로벌)
+## 5. 응답
 
-분기:
-- **파일 없음** → 새로 생성 + `/tmp/agi-template.md` 본문 그대로.
-- **파일 있음 + "TSoft AGI 자동 회수" 섹션 없음** → 끝에 template 본문 append.
-- **파일 있음 + "TSoft AGI 자동 회수" 섹션 있음**:
-  - template 의 "## TSoft AGI 자동 회수" 섹션과 본문 비교 (whitespace normalize).
-  - 같음 → skip.
-  - 다름 → 대상 파일 `<file>.bak.<yyyyMMdd_HHmmss>` 백업 + 해당 섹션만 template 으로 교체.
-- **옛 "TSoft AGI Push Policy" 섹션 있으면 제거** (v2.1 에선 사용 안 함 — AI 능동 명령 안내였음).
-
-**원칙**: 사용자가 손댄 다른 섹션은 보존. AGI 섹션만 갱신.
-
-## 5. 검증 (Stop hook 자동 동작 확인)
-
-설치 직후 검증:
-- 새 Codex thread 한 번 시작
-- 사용자가 짧은 메시지 ("test agi setup") 보냄
-- AI 는 응답 끝에 `<agi-digest>\nSUMMARY: agi-setup 검증\n</agi-digest>` 적음
-- turn 종료 → Stop hook 자동 실행 → 서버에 commit 생성
-- `https://erp.t-soft.co.kr/projects/<project_id>` 에서 새 commit 확인
-
-또는 강제 1 회 push (디버그용 — 운영자 명령, PowerShell):
-```powershell
-'{"session_id":"setup-test","transcript_path":"<rollout path>","cwd":"<cwd>"}' | `
-  python "$env:USERPROFILE\.config\tsoft-agi\agi-upload.py" --stop-hook
-```
-
-## 6. 응답 형식
-
-각 단계 한 줄 보고. 끝에:
+각 단계 한 줄 보고 + 마지막에:
 ```
 ✅ 설치 완료
-  · 토큰: abc123…xyz (마스킹)
-  · 업로더: agi-upload.py v1.4.x
-  · Hooks: Stop ✓ SessionStart ✓
-  · AGENTS.md: 갱신/유지
+  토큰: abc123…xyz
+  업로더: v1.4.x
+  Hooks: Stop ✓ SessionStart ✓
+  AGENTS.md: ✓ / 갱신
+  cwd 매핑: <cwd> → <id>
+
+이후 AI 는 응답 끝에 <agi-digest> 만 적기. 그게 전부.
 ```
 
-이 setup 작업 자체는 push 안 함 (AI 능동 호출 X — Hook 가 next turn 부터 자동).
+검증 push 는 안 함 — 다음 turn 의 Stop hook 가 자연스러운 검증.
