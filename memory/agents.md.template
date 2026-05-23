@@ -14,6 +14,11 @@
 > push / Memory inject / 첨부 / 운영자 지시 받기 — 모두 Codex hook 가 자동 처리.
 > AI 가 능동적으로 명령 실행 / 도구 호출 X.
 >
+> **모든 응답 본문 / 산출물 / digest 의 자연어는 한글** (운영자 모국어).
+> 사용자가 한국어로 요청 → AI 가 영어로 답변 X. 코드 식별자 / 표준 영어 용어
+> (TASKS / DECISIONS / commit_type 등) 만 영어. 산출 파일명도 가능한 한글 또는
+> 영어 snake_case (예: 디자인_v2_로그인.html / login_v2_kr.html).
+>
 > **AI 는 push 여부 판단 권한 없음** — 모든 turn (단순 "네", "확인", 코드 변경 X, 의미 변화 X 어떤 경우든) **무조건 digest 작성**. 운영자가 erp.t-soft.co.kr 에서 review 할 권리. skip 판단은 시스템 (Stop hook) 또는 운영자.
 >
 > **금지된 출력 (옛 v1 잔재)**:
