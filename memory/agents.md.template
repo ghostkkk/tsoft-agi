@@ -38,7 +38,11 @@ SUMMARY: 1~2문장 short label
 DECISIONS:
 - (새 결정 한 항목당 1줄)
 TASKS:
-- (새 할일)
+- (이번 turn 에 새로 생긴 할일 — 자동으로 Task DB row create)
+TASKS_DONE:
+- (이전 turn 에 잡았던 할일 중 끝난 것 제목 — 자동으로 Task → done 전환)
+TASKS_BLOCKED:
+- (멈춘 할일 제목 — <사유>) 형식. 자동으로 Task → blocked 전환 + reason 저장)
 RISKS:
 - [low|medium|high] (발견된 리스크)
 DEPRECATED:
