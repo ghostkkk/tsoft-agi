@@ -107,6 +107,45 @@ NEXT_CONTEXT:
 
 AI 는 위 어느 것도 명령 실행 / 도구 호출 안 함. 응답에 `<agi-digest>` 블록 적으면 끝.
 
+### 큰 turn 의 phase 별 push (수시 갱신, 중요)
+
+한 turn 안 작업이 **30분+ 또는 phase 5+ 또는 명시적으로 긴 작업** 이면 — 마지막에 last-digest 한 번으로 압축 X. **매 phase 끝마다 별도 commit push**. 그래야 운영자가 시간순 timeline 으로 진행 상황 monitoring + 중간 fail 시 부분 복구 가능.
+
+**Phase push 절차** (Windows PowerShell):
+
+1. **turn 시작 시 (첫 phase 직전) state reset**:
+   ```powershell
+   python "$env:USERPROFILE\.config\tsoft-agi\agi-upload.py" --phase-reset --quiet
+   ```
+
+2. **각 phase 끝에**:
+   - 해당 phase 의 작은 `<agi-digest>` 작성 (RAW 5 필수 + 조건부 sub-header)
+   - 임시 file 에 저장 (UTF-8 no BOM):
+     ```powershell
+     $tmp = "$env:TEMP\agi-p1.txt"
+     [System.IO.File]::WriteAllText($tmp, $digest1, (New-Object System.Text.UTF8Encoding($false)))
+     python "$env:USERPROFILE\.config\tsoft-agi\agi-upload.py" --file $tmp --phase --source-tool codex --quiet
+     Remove-Item $tmp
+     ```
+   - `--phase` flag 가 phase_group 자동 발급/재사용 + seq 자동 증가
+
+3. **turn 의 마지막 last-digest 작성 시 RAW 안 sub-header 추가**:
+   ```
+   [PHASE_GROUP] <위에서 발급된 group id>
+   [PHASE_KIND] final
+   ```
+   → Stop hook 의 자동 final push 도 같은 group 으로 묶임. UI 에서 phase 들의 부모로 표시.
+
+**큰 turn 판단 기준**:
+- 30분 이상 작업
+- phase 5개 이상 명확한 단계 (분석 → 설계 → 구현 → 검증 → 문서)
+- 코드 변경 10+ 파일
+- 여러 mockup / artifacts 생성
+- 사용자 명시 ("자세히 분석해줘", "전체 작업해줘" 등)
+
+**작은 turn (대부분)**:
+phase push 안 함. 응답 끝의 `<agi-digest>` 하나로 Stop hook 가 자동 push.
+
 ### Secret 가드
 
 응답에 다음 패턴 detect 시 — `<agi-digest>` 안에 평문 노출 금지:
