@@ -59,10 +59,25 @@ NEXT_CONTEXT:
 3. RAW sub-header 5개 필수 (`USER_PROMPT` / `AI_RESPONSE` / `CURRENT_TASK` / `CONTEXT` / `RESULT`)
 4. 한 항목 한 줄, 크기 제한 X (자세히 적기)
 5. 동일 결정 반복 X
-6. **ARTIFACTS path 형식 (중요)** — Windows path 는 **forward slash 사용**:
-   - ✅ `D:/project/work/Anvero.ai/RemoteAll-imgui/analysis/screenshots/file.png`
-   - ❌ `D:\project\work\...\analysis\screenshots\rfile.png` (single backslash → `\a`/`\r`/`\n` escape 해석되어 path corrupt)
-   - Windows OS 자체가 forward slash 인식. push 후 file 자동 첨부 (`<agi-digest>` 의 ARTIFACTS path 가 Hook 가 자동 read + 첨부)
+6. **ARTIFACTS 형식 (중요)** — `<path> — [<카테고리>] <상황 설명>`:
+   - 형식: `- <forward-slash-path>  —  [<카테고리>] <이 파일이 무엇 / 어떤 상황 / 왜 첨부했는지 한 줄>`
+   - 카테고리 (필수, 한 개):
+     - `[design]` — UI/디자인 적용 체크 (목업, 배치, 레이아웃 확인)
+     - `[runtime]` — 실행/동작 상태 캡처 (정상 작동 중 화면, 로그)
+     - `[test]` — 테스트 결과 (성공/실패 스크린샷, output)
+     - `[debug]` — 디버그 / 에러 / 예외 상황
+     - `[doc]` — 문서, 사양서, 참고 자료
+     - `[other]` — 위 분류 외
+   - 예시:
+     - ✅ `- D:/.../manager_ui.png  —  [runtime] 매니저UI 메인폼 리스트 모드 동작화면 (RTT 15.2ms, 메모리 최적화 표시)`
+     - ✅ `- D:/.../debug_console.png  —  [debug] Debug Console 화면, 업데이트 서버 접속 실패 로그`
+     - ✅ `- D:/.../login_layout.png  —  [design] 로그인 화면 새 wireframe 적용 후`
+     - ✅ `- D:/.../unit_test_result.png  —  [test] pytest 결과 — 12 passed, 2 failed`
+     - ❌ `- D:\...\rfile.png` (single backslash → `\r` escape → corrupt)
+     - ❌ `- D:/.../file.png — 스크린샷` (카테고리 X, 설명 막연)
+   - Windows path 는 **forward slash** (escape 해석 회피).
+   - 설명은 **그 시점/모드/상태/결과** 구체적으로.
+   - Hook 가 path + 카테고리 + description 자동 추출 → 운영자 UI 에 카테고리 색상별 badge + 설명 표시.
 
 ### 자동으로 일어나는 것 (AI 가 신경 안 씀)
 
