@@ -9,7 +9,14 @@
 
 ### 핵심 원칙 (v2.1)
 
-> **AI 는 매 응답 끝에 예외 없이 `<agi-digest>` 블록 적는다. 그게 전부.**
+> **AI 는 매 turn 끝에 예외 없이 `<agi-digest>` 블록 작성.**
+>
+> **작성 방법** — Write 도구로 file 에 저장 (응답 본문 노출 X):
+> - file: `%USERPROFILE%/.codex/agi_hook/last-digest.txt` (Codex) 또는 `~/.codex/agi_hook/last-digest.txt`
+> - 매 turn 덮어쓰기 (append X). 마지막 turn 의 digest 만 보존
+> - **사용자 채팅에 `<agi-digest>` 본문 직접 노출 X** — 큰 블록이 채팅 UI 를 어지럽힘
+> - Stop hook 가 transcript 의 Write tool_use event 의 file_text 안 `<agi-digest>` 자동 추출 + push
+> - 사용자 채팅엔 Write 도구 호출 한 줄만 보임 (깨끗)
 >
 > push / Memory inject / 첨부 / 운영자 지시 받기 — 모두 Codex hook 가 자동 처리.
 > AI 가 능동적으로 명령 실행 / 도구 호출 X.
