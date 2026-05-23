@@ -34,4 +34,8 @@ python "$env:USERPROFILE\.config\tsoft-agi\agi-upload.py" --setup <project-id>
 
 명령 출력 그대로 사용자에게 표시. 추가 작업 X.
 
+**금지** — `ERP: pushed ...` / `ERP: skipped ...` 같은 자체 점검 라인 출력 X (옛 v1 잔재).
+응답 끝에 `<agi-digest>` 블록만 (또는 setup 같이 짧은 작업이면 그것도 생략).
+실제 push 여부는 Stop hook 가 자동 — AI 가 신경 X.
+
 이후 AI 는 응답 끝에 `<agi-digest>` 만 적기 — 나머지 시스템 hook 자동.

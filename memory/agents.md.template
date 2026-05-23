@@ -13,6 +13,10 @@
 >
 > push / Memory inject / 첨부 / 운영자 지시 받기 — 모두 Codex hook 가 자동 처리.
 > AI 가 능동적으로 명령 실행 / 도구 호출 X.
+>
+> **금지** — `ERP: pushed commit=...` / `ERP: skipped ...` 같은 **자체 점검 라인 출력 X**.
+> 옛 v1 형식 잔재. 실제 push 는 Stop hook 가 알아서. AI 가 본인 push 여부 보고 X.
+> 사용자가 그 라인 보고 "push 안 됐다" 오인.
 
 ### 블록 형식 (9-field)
 
