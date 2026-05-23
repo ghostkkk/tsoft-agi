@@ -59,6 +59,10 @@ NEXT_CONTEXT:
 3. RAW sub-header 5개 필수 (`USER_PROMPT` / `AI_RESPONSE` / `CURRENT_TASK` / `CONTEXT` / `RESULT`)
 4. 한 항목 한 줄, 크기 제한 X (자세히 적기)
 5. 동일 결정 반복 X
+6. **ARTIFACTS path 형식 (중요)** — Windows path 는 **forward slash 사용**:
+   - ✅ `D:/project/work/Anvero.ai/RemoteAll-imgui/analysis/screenshots/file.png`
+   - ❌ `D:\project\work\...\analysis\screenshots\rfile.png` (single backslash → `\a`/`\r`/`\n` escape 해석되어 path corrupt)
+   - Windows OS 자체가 forward slash 인식. push 후 file 자동 첨부 (`<agi-digest>` 의 ARTIFACTS path 가 Hook 가 자동 read + 첨부)
 
 ### 자동으로 일어나는 것 (AI 가 신경 안 씀)
 
